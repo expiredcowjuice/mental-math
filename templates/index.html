@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mental Math Practice</title>
+    <style>
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        .container {
+            text-align: center;
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 600px;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 1rem;
+        }
+        
+        #timer {
+            font-size: 1.5rem;
+            color: #495057;
+            margin-bottom: 1rem;
+        }
+        
+        #question {
+            background-color: #e9ecef;
+            padding: 0.5rem 1rem;
+            margin-bottom: 1rem;
+            border-radius: 5px;
+        }
+        
+        input[type="number"] {
+            width: calc(100% - 2rem);
+            padding: 0.5rem;
+            margin-bottom: 1rem;
+            border: 2px solid #ced4da;
+            border-radius: 5px;
+        }
+        
+        button {
+            width: calc(100% - 2rem);
+            padding: 0.5rem;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 1rem;
+        }
+        
+        #finishTest {
+            background-color: #dc3545;
+        }
+
+        #restartTest {
+            background-color: #22d156;
+        }
+        
+        #results {
+            text-align: left;
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: #e9ecef;
+            border-radius: 5px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        
+        .result-entry {
+            margin-bottom: 0.5rem;
+        }
+        
+        .user-answer {
+            color: #007bff;
+        }
+        
+        .correct-answer {
+            color: #28a745;
+        }
+
+        .incorrect-answer {
+            color: #dc3545;
+        }
+        
+        #finalScore {
+            font-size: 1.5rem;
+            color: #495057;
+            margin-bottom: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                width: 90%;
+            }
+        
+            input[type="number"], button {
+                width: calc(100% - 1rem);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Mental Math Practice</h1>
+        <div id="timer" class="mb-3">120</div>
+        <div id="question" class="mb-3"></div>
+        <input type="number" step="any" id="answer" class="form-control mb-3" placeholder="Enter your answer here" autofocus>
+        <button id="finishTest" class="btn btn-danger mb-3">Finish Test</button>
+        <button id="restartTest" class="btn btn-secondary mb-3">Restart Test</button> <!-- Restart Test Button -->
+        <div id="finalScore" class="mb-3"></div>
+        <div id="results" class="results-container"></div>
+    </div>
+
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        let timeLeft = 120;
+        let timerId = setInterval(countdown, 1000);
+        let answersLog = []; // To log user's answers and correct answers
+
+        function countdown() {
+            if (timeLeft <= 0) {
+                clearTimeout(timerId);
+                showResults(); // Function to show all answers at the end
+            } else {
+                document.getElementById('timer').innerHTML = timeLeft;
+                timeLeft--;
+            }
+        }
+
+        $(document).ready(function() {
+            getNewQuestion();
+            $("#answer").keypress(function(event) {
+                if (event.which == 13) { // Enter key
+                    event.preventDefault(); // Prevent default Enter action
+                    submitAnswer();
+                }
+            });
+            $("#finishTest").click(function() {
+                finishTestEarly(); // Function to handle early test completion
+            });
+            $("#restartTest").click(function() {
+                restartTest();
+            });
+        });
+
+        function getNewQuestion() {
+            $.getJSON("/get_question", function(data) {
+                $("#question").html(data.question + " = ");
+                $("#answer").val('').focus();
+                $("#answer").data('id', data.id); // Store question ID
+            });
+        }
+
+        function submitAnswer() {
+            const answer = $("#answer").val();
+            const questionId = $("#answer").data('id');
+            $.ajax({
+            url: "/submit_answer",
+            type: "POST",
+            contentType: "application/json",
+            data: JSON.stringify({'id': questionId, 'answer': answer}),
+            success: function(response) {
+                const correctAnswer = response.correct ? "Correct" : response.right_answer;
+                const answerClass = response.correct ? "correct-answer" : "incorrect-answer";
+                answersLog.push({
+                question: $("#question").text().trim(),
+                your_answer: answer,
+                correct_answer: correctAnswer
+                });
+                getNewQuestion(); // Get next question
+            }
+            });
+        }
+
+        function showResults() {
+            $.getJSON("/get_score", function(score) {
+            let resultsHTML = "Results:<br>";
+            answersLog.forEach(function(item, index) {
+                const answerClass = item.correct_answer === "Correct" ? "correct-answer" : "incorrect-answer";
+                resultsHTML += `<b>Q${index + 1}:</b> ${item.question}, <b>Your Answer:</b> <span class="${answerClass}">${item.your_answer}</span>, <b>Correct Answer:</b> ${item.correct_answer}<br>`;
+            });
+            $("#results").html(resultsHTML);
+            $("#finalScore").html("Final Score: " + score.correct + " out of " + score.attempted); // Display the final score from the backend
+            $("#answer").prop('disabled', true); // Disable further input
+            });
+        }
+
+
+        function finishTestEarly() {
+            clearTimeout(timerId); // Stop the timer
+            timeLeft = 0; // Set timeLeft to 0 to indicate the test is over
+            showResults(); // Immediately show results
+        }
+
+
+        function restartTest() {
+            // Reset timer
+            timeLeft = 120;
+            document.getElementById('timer').innerHTML = timeLeft;
+            clearInterval(timerId);
+            timerId = setInterval(countdown, 1000);
+
+            // Clear previous answers log
+            answersLog = [];
+
+            // Send a POST request to reset the score
+            $.ajax({
+                url: "/reset_score",
+                type: "POST",
+                success: function(response) {
+                    console.log("Score reset successful");
+                }
+            });
+            
+            // Reset score display
+            $("#finalScore").html('');
+            
+            // Reset results display
+            $("#results").html('');
+
+            // Re-enable the answer input in case it was disabled
+            $("#answer").prop('disabled', false).val('');
+            
+            // Fetch a new question to start
+            getNewQuestion();
+        }
+
+
+    </script>
+</body>
+</html>
